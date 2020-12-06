@@ -1,0 +1,77 @@
+ARG NODE_VERSION
+ARG DEBIAN_VERSION
+
+########################################################
+# TESTING
+########################################################
+FROM nodebrick/nodebrick:${DEBIAN_VERSION}-${NODE_VERSION}-development AS testing
+ENV NODE_ENV="development"
+
+USER root
+
+RUN apt-get clean \
+    && apt-get -y -q update \
+    && apt-get -y -q install \
+    gnupg-agent \
+    python \
+    software-properties-common \
+    unzip
+
+# install aws cli
+RUN curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" \
+    && unzip awscli-bundle.zip \
+    && ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws \ 
+    && rm -f ./awscli-bundle.zip && rm -Rf ./awscli-bundle
+
+# install docker-ce-cli
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - \
+    && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+    && apt-get -y -q update \
+    && apt-get -y -q install docker-ce-cli
+
+# make sure the docker.sock exists and is having the proper permissions
+RUN groupadd docker \
+    && usermod -aG docker nodebrick \
+    && newgrp docker 
+
+USER nodebrick
+
+########################################################
+# DEVELOPMENT
+########################################################
+FROM testing AS development
+ENV NODE_ENV="development"
+
+########################################################
+# PRODUCTION
+########################################################
+FROM nodebrick/nodebrick:${DEBIAN_VERSION}-${NODE_VERSION} AS production
+ARG DIST_FOLDER="./dist"
+
+USER root
+RUN apt-get clean \
+    && apt-get -y -q update
+
+# copy our dist folder to the application root
+COPY --chown=nodebrick:nodebrick "${DIST_FOLDER}" "${HOME}/${APPLICATION_FOLDER}/"
+
+# be sure all files in the user root folder are accessible by the user
+RUN chown -R nodebrick:nodebrick "${HOME}" && chmod -R 755 "${HOME}"
+
+USER nodebrick
+
+WORKDIR "${HOME}/${APPLICATION_FOLDER}"
+
+# install all dependencies not modyfying the yarn lock. This command will fail if there are missing deps
+RUN yarn install --frozen-lockfile
+
+# we are setting the production env after install as yarn has a bug with this atm - https://github.com/yarnpkg/yarn/issues/761
+ENV NODE_ENV="production"
+
+# run the application
+CMD ["yarn", "start:production"]
+
+
+
+
+

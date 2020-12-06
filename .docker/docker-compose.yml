@@ -1,0 +1,39 @@
+# Author: Xavier Martin
+# Version: 1.0
+
+version: "3.7"
+
+services:
+    class_validator:
+        container_name: ${PROJECT_ID}-development
+        build:
+            context: ./
+            dockerfile: ./dockerfile
+            target: development
+            args:
+                - NODE_VERSION
+                - DEBIAN_VERSION
+        image: ${PROJECT_ID}:development
+        environment:
+            - NPM_TOKEN
+        volumes:
+            - project-data:/home/nodebrick/application
+            - ${PROJECT_PATH}/.docker/.persist/${PROJECT_ID}/bash_history/:/home/nodebrick/docker_bash/
+            - /var/run/docker.sock:/var/run/docker.sock
+        working_dir: /home/nodebrick/application/
+        command: bash -c -x "
+            tail -f /dev/null"
+
+volumes:
+    # our application source
+    project-data:
+        name: "${PROJECT_ID}-data"
+        driver: local
+        driver_opts:
+            type: none
+            device: ${HOST_PATH} # this is the mount path on the host
+            o: bind
+
+networks:
+    default:
+        name: "${PROJECT_ID}-network"
